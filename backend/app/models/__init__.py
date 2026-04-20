@@ -6,6 +6,7 @@ from .order import Order, OrderItem
 from .appointment import Appointment
 from .report import Report
 from .fitting import FittingSession, FittingSituation
+from .pec import PriseEnCharge, DocumentPEC
 
 __all__ = [
     "User", "Patient", "Audiogram",
@@ -13,4 +14,5 @@ __all__ = [
     "Order", "OrderItem",
     "Appointment", "Report",
     "FittingSession", "FittingSituation",
+    "PriseEnCharge", "DocumentPEC",
 ]

@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     EDI_SENDER_ID: str = ""
     EDI_RECEIVER_ID: str = ""
 
+    # SMTP (envoi emails PEC mutuelles)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_SENDER_NAME: str = "AudioAssist Pro"
+    SMTP_SENDER_EMAIL: str = ""
+    SMTP_BCC_CENTRE: str = ""  # BCC automatique sur toutes les PEC
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
