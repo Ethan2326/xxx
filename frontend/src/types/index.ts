@@ -31,6 +31,7 @@ export interface Patient {
   type_appareillage?: string
   prescripteur?: string
   mutuelle?: string
+  numero_adherent_mutuelle?: string
   notes?: string
   created_at: string
 }

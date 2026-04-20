@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 from typing import Optional
+import os
 
 
 class Settings(BaseSettings):
@@ -57,8 +59,19 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                import json
+                return json.loads(v)
+            return [o.strip() for o in v.split(",") if o.strip()]
+        return v
+
     class Config:
-        env_file = ".env"
+        env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
         case_sensitive = True
 
 
