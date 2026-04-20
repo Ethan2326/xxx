@@ -1,0 +1,81 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: audioassist
+      POSTGRES_PASSWORD: audioassist
+      POSTGRES_DB: audioassist
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audioassist"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - audioassist
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - audioassist
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://audioassist:audioassist@db:5432/audioassist
+      DATABASE_URL_SYNC: postgresql://audioassist:audioassist@db:5432/audioassist
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - audioassist
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - audioassist
+    restart: unless-stopped
+
+  # Worker Celery pour tâches async (envoi EDI, rappels RDV, etc.)
+  worker:
+    build: ./backend
+    command: celery -A app.celery_app worker --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://audioassist:audioassist@db:5432/audioassist
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - redis
+      - db
+    networks:
+      - audioassist
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  audioassist:
+    driver: bridge
