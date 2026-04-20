@@ -1,0 +1,39 @@
+databases:
+  - name: audioassist-db
+    plan: free
+    databaseName: audioassist
+    user: audioassist
+
+services:
+  # ── Backend FastAPI ────────────────────────────────────────────────────────
+  - type: web
+    name: backend-cjfm
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    branch: claude/hearing-aid-ai-assistant-6SpYn
+    port: 8000
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: audioassist-db
+          property: connectionString   # postgresql://... auto-converti en asyncpg
+      - key: DATABASE_URL_SYNC
+        fromDatabase:
+          name: audioassist-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false                    # À renseigner dans le dashboard Render
+      - key: CORS_ORIGINS
+        value: '["https://frontend-1w0c.onrender.com"]'
+
+  # ── Frontend React / nginx ─────────────────────────────────────────────────
+  - type: web
+    name: frontend-1w0c
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    branch: claude/hearing-aid-ai-assistant-6SpYn
+    port: 80

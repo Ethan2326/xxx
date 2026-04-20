@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://audioassist:audioassist@db:5432/audioassist"
     DATABASE_URL_SYNC: str = "postgresql://audioassist:audioassist@db:5432/audioassist"
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def ensure_async_driver(cls, v: str) -> str:
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
 
