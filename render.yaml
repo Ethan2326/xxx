@@ -1,0 +1,71 @@
+services:
+  # ─── Backend FastAPI ─────────────────────────────────────────────────────────
+  - type: web
+    name: backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /docs
+    envVars:
+      - key: DATABASE_URL_SYNC
+        fromDatabase:
+          name: audioassist-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: audioassist-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "false"
+      - key: APP_NAME
+        value: AudioAssist Pro
+      # À renseigner manuellement dans le dashboard Render après le premier déploiement
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+  # ─── Celery Worker ────────────────────────────────────────────────────────────
+  - type: worker
+    name: worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    dockerCommand: celery -A app.celery_app worker --loglevel=info
+    envVars:
+      - key: DATABASE_URL_SYNC
+        fromDatabase:
+          name: audioassist-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: audioassist-redis
+          property: connectionString
+      - key: SECRET_KEY
+        sync: false
+
+  # ─── Frontend React / Nginx ───────────────────────────────────────────────────
+  - type: web
+    name: frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+
+  # ─── Redis ────────────────────────────────────────────────────────────────────
+  - type: redis
+    name: audioassist-redis
+    plan: free
+    ipAllowList: []
+
+databases:
+  - name: audioassist-db
+    databaseName: audioassist
+    user: audioassist
+    plan: free
