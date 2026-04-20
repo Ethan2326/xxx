@@ -1,3 +1,5 @@
+ARG CACHEBUST=1
+
 FROM node:20-alpine AS builder
 
 WORKDIR /app
