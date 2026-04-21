@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { integrationsAPI } from '@/services/api'
 import { useAuthStore } from '@/store'
-import { Settings, Wifi, WifiOff, User, Building, Shield, RefreshCw } from 'lucide-react'
+import { Settings, Wifi, WifiOff, User, Building, Shield, RefreshCw, Upload } from 'lucide-react'
 import CosiumSyncModal from '@/components/cosium/CosiumSyncModal'
+import CosiumCsvImportModal from '@/components/cosium/CosiumCsvImportModal'
 
 export default function SettingsPage() {
   const { user } = useAuthStore()
   const [showCosiumSync, setShowCosiumSync] = useState(false)
+  const [showCosiumCsv, setShowCosiumCsv] = useState(false)
 
   const { data: integrations, refetch } = useQuery({
     queryKey: ['integrations-status'],
@@ -68,14 +70,24 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     {key === 'cosium' && (
-                      <button
-                        className="btn-secondary text-xs flex items-center gap-1.5"
-                        onClick={() => setShowCosiumSync(true)}
-                        title="Synchroniser toute la base patients avec Cosium"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Synchroniser la base
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          className="btn-secondary text-xs flex items-center gap-1.5"
+                          onClick={() => setShowCosiumCsv(true)}
+                          title="Importer un export CSV de Cosium"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          Import CSV
+                        </button>
+                        <button
+                          className="btn-secondary text-xs flex items-center gap-1.5"
+                          onClick={() => setShowCosiumSync(true)}
+                          title="Synchroniser via API Cosium"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Sync API
+                        </button>
+                      </div>
                     )}
                     <div className={`flex items-center gap-2 text-sm font-medium ${info.connected ? 'text-green-600' : 'text-red-500'}`}>
                       {info.connected
@@ -110,8 +122,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Cosium sync modal */}
       {showCosiumSync && <CosiumSyncModal onClose={() => setShowCosiumSync(false)} />}
+      {showCosiumCsv  && <CosiumCsvImportModal onClose={() => setShowCosiumCsv(false)} />}
 
       {/* RGPD */}
       <div className="card p-6">

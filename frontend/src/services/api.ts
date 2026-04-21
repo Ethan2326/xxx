@@ -178,6 +178,8 @@ export interface CosiumSyncPreview {
   unmatched_local: { id: string; first_name: string; last_name: string; birth_date?: string; nir?: string }[]
   total_cosium: number
   total_local: number
+  total_csv_rows?: number
+  headers_detected?: Record<string, number>
 }
 
 export default api

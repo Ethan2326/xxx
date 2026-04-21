@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
+import csv, io, unicodedata, re
 from app.database import get_db
 from app.services.noah4_service import noah4_service
 from app.services.audiowizard_service import audiowizard_service
@@ -283,3 +284,169 @@ async def cosium_sync_apply(
             errors.append(str(e))
     await db.flush()
     return {"applied": applied, "errors": errors}
+
+
+# ── CSV import Cosium ─────────────────────────────────────────────────────────
+
+def _normalize(s: str) -> str:
+    """Minuscule + supprime accents + espaces en trop."""
+    s = unicodedata.normalize("NFD", s or "")
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", s).lower().strip()
+
+
+def _detect_columns(headers: list[str]) -> dict:
+    """Détecte automatiquement les colonnes d'un export Cosium."""
+    mapping = {}
+    for i, h in enumerate(headers):
+        hn = _normalize(h)
+        if any(k in hn for k in ("id", "identifiant", "code patient", "num patient", "numero")):
+            mapping.setdefault("cosium_id", i)
+        if any(k in hn for k in ("nom", "name")) and "prenom" not in hn and "first" not in hn:
+            mapping.setdefault("last_name", i)
+        if any(k in hn for k in ("prenom", "prénom", "first name", "firstname")):
+            mapping.setdefault("first_name", i)
+        if any(k in hn for k in ("naissance", "birth", "ddn", "date de nai")):
+            mapping.setdefault("birth_date", i)
+        if any(k in hn for k in ("secu", "nir", "securite", "assure")):
+            mapping.setdefault("nir", i)
+    return mapping
+
+
+def _parse_date(val: str) -> Optional[str]:
+    """Tente de normaliser une date en YYYY-MM-DD."""
+    val = (val or "").strip()
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            from datetime import datetime
+            return datetime.strptime(val, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
+
+
+@router.post("/cosium/import-csv/preview")
+async def cosium_csv_preview(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Reçoit un fichier CSV/TSV exporté depuis Cosium.
+    Retourne une liste de correspondances avec les patients locaux.
+    """
+    content = await file.read()
+    # Essaie plusieurs encodages
+    for enc in ("utf-8-sig", "latin-1", "cp1252"):
+        try:
+            text = content.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise HTTPException(400, "Impossible de lire le fichier (encodage non supporté)")
+
+    # Détecte le séparateur
+    sample = text[:2000]
+    sep = ";" if sample.count(";") > sample.count(",") else ","
+
+    reader = csv.reader(io.StringIO(text), delimiter=sep)
+    rows = list(reader)
+    if len(rows) < 2:
+        raise HTTPException(400, "Fichier vide ou sans données")
+
+    headers = rows[0]
+    col = _detect_columns(headers)
+
+    if "cosium_id" not in col and "last_name" not in col:
+        raise HTTPException(400, detail={
+            "message": "Colonnes non reconnues",
+            "headers_found": headers,
+            "hint": "Le fichier doit contenir au moins une colonne ID et une colonne Nom"
+        })
+
+    # Charge les patients locaux
+    res = await db.execute(select(Patient))
+    local_patients: list[Patient] = list(res.scalars().all())
+
+    local_by_nir: dict[str, Patient] = {
+        p.nir.replace(" ", ""): p for p in local_patients if p.nir
+    }
+    already_linked: set[str] = {p.cosium_id for p in local_patients if p.cosium_id}
+
+    matches = []
+    used_local_ids: set[str] = set()
+
+    for row in rows[1:]:
+        if not any(row):
+            continue
+
+        def cell(key: str) -> str:
+            idx = col.get(key)
+            return row[idx].strip() if idx is not None and idx < len(row) else ""
+
+        cosium_id = cell("cosium_id")
+        c_nom = cell("last_name")
+        c_prenom = cell("first_name")
+        c_ddn = _parse_date(cell("birth_date"))
+        c_nir = cell("nir").replace(" ", "")
+
+        if cosium_id in already_linked:
+            continue
+
+        cosium_patient = {
+            "cosium_id": cosium_id,
+            "last_name": c_nom,
+            "first_name": c_prenom,
+            "birth_date": c_ddn,
+            "nir": c_nir or None,
+        }
+
+        best_local: Optional[Patient] = None
+        best_score = 0
+
+        # NIR exact
+        if c_nir and c_nir in local_by_nir:
+            candidate = local_by_nir[c_nir]
+            if str(candidate.id) not in used_local_ids:
+                best_local = candidate
+                best_score = 100
+        else:
+            for lp in local_patients:
+                if lp.cosium_id or str(lp.id) in used_local_ids:
+                    continue
+                cp_mapped = {"last_name": c_nom, "first_name": c_prenom, "birth_date": c_ddn, "nir": c_nir}
+                score = _match_score(lp, cp_mapped)
+                if score > best_score:
+                    best_score = score
+                    best_local = lp
+
+        local_summary = None
+        local_id = None
+        if best_local and best_score >= 50:
+            local_summary = _patient_summary(best_local)
+            local_id = str(best_local.id)
+            used_local_ids.add(local_id)
+
+        matches.append({
+            "cosium_id": cosium_id,
+            "cosium_patient": cosium_patient,
+            "local_patient": local_summary,
+            "local_patient_id": local_id,
+            "score": best_score,
+            "auto_match": best_score >= 90,
+        })
+
+    unmatched_local = [
+        _patient_summary(p)
+        for p in local_patients
+        if not p.cosium_id and str(p.id) not in used_local_ids
+    ]
+
+    return {
+        "matches": matches,
+        "unmatched_local": unmatched_local,
+        "headers_detected": col,
+        "total_csv_rows": len(rows) - 1,
+        "total_local": len(local_patients),
+    }
