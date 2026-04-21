@@ -148,6 +148,8 @@ export const integrationsAPI = {
     api.get<CosiumSyncPreview>('/integrations/cosium/sync/preview', { params: { max_cosium: maxCosium } }),
   cosiumSyncApply: (links: { local_id: string; cosium_id: string }[]) =>
     api.post<{ applied: number; errors: string[] }>('/integrations/cosium/sync/apply', links),
+  cosiumDebugLogin: () =>
+    api.get<Record<string, unknown>>('/integrations/cosium/debug-login'),
 }
 
 export interface CosiumSyncMatch {

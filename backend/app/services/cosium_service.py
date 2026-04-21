@@ -46,61 +46,107 @@ class CosiumService:
 
     async def _login(self):
         """
-        Simule le flux de login navigateur :
-        1. GET /classic/  → Keycloak redirige vers son formulaire
-        2. Extrait l'action du formulaire (URL avec session_code + CSRF)
-        3. POST login/password → Keycloak redirige vers Cosium
-        4. Les cookies access_token + JSESSIONID sont capturés automatiquement
+        Login Cosium via Keycloak ROPC (Resource Owner Password Credentials).
+        Cosium est une SPA — le redirect Keycloak se fait en JS, pas en HTTP.
+        On trouve l'URL Keycloak via keycloak.json ou la découverte OIDC.
         """
         if not self._configured():
             raise Exception(
                 "Cosium non configuré. Définissez COSIUM_URL, COSIUM_USERNAME, COSIUM_PASSWORD."
             )
 
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            timeout=30,
-            headers=_BROWSER_HEADERS,
-        ) as client:
-            # Étape 1 : accès à l'app → redirection Keycloak
-            r1 = await client.get(f"{self.base_url}/classic/")
+        kc_url, realm, client_id = await self._discover_keycloak()
+        token_endpoint = f"{kc_url}/realms/{realm}/protocol/openid-connect/token"
 
-            # Étape 2 : trouver l'URL d'action du formulaire Keycloak
-            action = re.search(r'action="([^"]+)"', r1.text)
-            if not action:
-                # Peut-être déjà connecté ou page inattendue
-                if "classic" in str(r1.url) and r1.status_code == 200:
-                    self._cookies = dict(client.cookies)
-                    self._session_expires = datetime.utcnow() + timedelta(hours=8)
-                    return
-                raise Exception(
-                    "Formulaire Keycloak introuvable. "
-                    f"URL finale : {r1.url} — vérifiez COSIUM_URL."
-                )
-
-            login_url = action.group(1).replace("&amp;", "&")
-
-            # Étape 3 : soumettre les identifiants
-            r2 = await client.post(
-                login_url,
-                data={"username": self.username, "password": self.password},
-                headers={
-                    **_BROWSER_HEADERS,
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Referer": str(r1.url),
+        async with httpx.AsyncClient(timeout=20, headers=_BROWSER_HEADERS) as client:
+            r = await client.post(
+                token_endpoint,
+                data={
+                    "grant_type": "password",
+                    "client_id": client_id,
+                    "username": self.username,
+                    "password": self.password,
+                    "scope": "openid",
                 },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
-
-            # Vérifier l'échec (on reste sur la page Keycloak)
-            if "kc-form-login" in r2.text or "login-actions" in str(r2.url):
+            if r.status_code != 200:
                 raise Exception(
-                    "Identifiants Cosium incorrects — vérifiez COSIUM_USERNAME et COSIUM_PASSWORD."
+                    f"Keycloak login échoué ({r.status_code}): {r.text[:200]}"
                 )
+            data = r.json()
+            access_token = data.get("access_token") or data.get("id_token")
+            if not access_token:
+                raise Exception(f"Aucun token dans la réponse Keycloak: {data}")
 
-            # Étape 4 : stocker les cookies
-            self._cookies = dict(client.cookies)
-            self._session_expires = datetime.utcnow() + timedelta(hours=7, minutes=30)
-            log.info("cosium_login_ok", site=self.base_url, cookies=list(self._cookies.keys()))
+            self._cookies = {
+                "access_token": access_token,
+                "KC_ROUTE": "kc1",
+            }
+            self._session_expires = datetime.utcnow() + timedelta(
+                seconds=data.get("expires_in", 28800) - 60
+            )
+            log.info("cosium_login_ok", realm=realm, client_id=client_id)
+
+    async def _discover_keycloak(self) -> tuple[str, str, str]:
+        """
+        Trouve l'URL Keycloak, le realm et le client_id depuis Cosium.
+        Essaie dans l'ordre :
+          1. /classic/keycloak.json
+          2. /keycloak.json
+          3. En-tête WWW-Authenticate de l'API
+        """
+        paths_to_try = [
+            f"{self.base_url}/classic/keycloak.json",
+            f"{self.base_url}/keycloak.json",
+            "/".join(self.base_url.split("/")[:3]) + "/keycloak.json",
+        ]
+
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True,
+                                      headers=_BROWSER_HEADERS) as client:
+            # 1. Cherche keycloak.json
+            for url in paths_to_try:
+                try:
+                    r = await client.get(url)
+                    if r.status_code == 200:
+                        kc = r.json()
+                        auth_server = kc.get("auth-server-url", "").rstrip("/")
+                        realm = kc.get("realm", "")
+                        cid = kc.get("resource", kc.get("client_id", ""))
+                        if auth_server and realm and cid:
+                            log.info("cosium_keycloak_found", source=url,
+                                     auth_server=auth_server, realm=realm, client_id=cid)
+                            return auth_server, realm, cid
+                except Exception:
+                    continue
+
+            # 2. Essaie un appel API sans auth → lit WWW-Authenticate
+            try:
+                r = await client.get(
+                    f"{self.base_url}/api/customers",
+                    params={"page_number": 0, "page_size": 1},
+                )
+                www_auth = r.headers.get("WWW-Authenticate", "")
+                # Format: Bearer realm="https://...auth/realms/xxx" ...
+                realm_match = re.search(r'realm="([^"]+)"', www_auth)
+                if realm_match:
+                    realm_url = realm_match.group(1)
+                    # realm_url = https://kc.cosium.biz/auth/realms/cosium
+                    parts = realm_url.rstrip("/").rsplit("/realms/", 1)
+                    if len(parts) == 2:
+                        kc_url = parts[0]
+                        realm = parts[1]
+                        log.info("cosium_keycloak_from_www_auth",
+                                 kc_url=kc_url, realm=realm)
+                        return kc_url, realm, "cosium-web"
+            except Exception:
+                pass
+
+        raise Exception(
+            "Impossible de trouver la configuration Keycloak de Cosium. "
+            f"Vérifié : {paths_to_try}. "
+            "Contactez le support pour obtenir l'URL Keycloak."
+        )
 
     async def _ensure_session(self):
         """Re-login si la session est expirée ou absente."""

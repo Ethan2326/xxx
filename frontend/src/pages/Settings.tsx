@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { integrationsAPI } from '@/services/api'
 import { useAuthStore } from '@/store'
-import { Settings, Wifi, WifiOff, User, Building, Shield, RefreshCw, Upload, Download } from 'lucide-react'
+import { Settings, Wifi, WifiOff, User, Building, Shield, RefreshCw, Upload, Download, Bug } from 'lucide-react'
 import CosiumSyncModal from '@/components/cosium/CosiumSyncModal'
 import CosiumCsvImportModal from '@/components/cosium/CosiumCsvImportModal'
 import CosiumImportModal from '@/components/cosium/CosiumImportModal'
@@ -12,6 +12,8 @@ export default function SettingsPage() {
   const [showCosiumSync, setShowCosiumSync] = useState(false)
   const [showCosiumCsv, setShowCosiumCsv] = useState(false)
   const [showCosiumImport, setShowCosiumImport] = useState(false)
+  const [cosiumDebug, setCosiumDebug] = useState<Record<string, unknown> | null>(null)
+  const [debugLoading, setDebugLoading] = useState(false)
 
   const { data: integrations, refetch } = useQuery({
     queryKey: ['integrations-status'],
@@ -76,7 +78,6 @@ export default function SettingsPage() {
                         <button
                           className="btn-primary text-xs flex items-center gap-1.5"
                           onClick={() => setShowCosiumImport(true)}
-                          title="Importer tous les patients Cosium"
                         >
                           <Download className="w-3.5 h-3.5" />
                           Importer les patients
@@ -84,10 +85,27 @@ export default function SettingsPage() {
                         <button
                           className="btn-secondary text-xs flex items-center gap-1.5"
                           onClick={() => setShowCosiumCsv(true)}
-                          title="Importer via export CSV"
                         >
                           <Upload className="w-3.5 h-3.5" />
                           Import CSV
+                        </button>
+                        <button
+                          className="btn-secondary text-xs flex items-center gap-1.5"
+                          disabled={debugLoading}
+                          onClick={async () => {
+                            setDebugLoading(true)
+                            try {
+                              const r = await integrationsAPI.cosiumDebugLogin()
+                              setCosiumDebug(r.data)
+                            } catch(e: any) {
+                              setCosiumDebug({ erreur: e?.response?.data?.detail || String(e) })
+                            } finally {
+                              setDebugLoading(false)
+                            }
+                          }}
+                        >
+                          <Bug className="w-3.5 h-3.5" />
+                          {debugLoading ? 'Test…' : 'Tester'}
                         </button>
                       </div>
                     )}
@@ -127,6 +145,21 @@ export default function SettingsPage() {
       {showCosiumSync   && <CosiumSyncModal onClose={() => setShowCosiumSync(false)} />}
       {showCosiumCsv    && <CosiumCsvImportModal onClose={() => setShowCosiumCsv(false)} />}
       {showCosiumImport && <CosiumImportModal onClose={() => setShowCosiumImport(false)} />}
+
+      {/* Debug Cosium */}
+      {cosiumDebug && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h3 className="font-bold text-gray-900">Diagnostic connexion Cosium</h3>
+              <button onClick={() => setCosiumDebug(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">✕</button>
+            </div>
+            <pre className="overflow-auto p-5 text-xs text-gray-700 bg-gray-50 rounded-b-2xl flex-1">
+              {JSON.stringify(cosiumDebug, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
 
       {/* RGPD */}
       <div className="card p-6">
