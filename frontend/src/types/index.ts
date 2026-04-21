@@ -30,6 +30,9 @@ export interface Patient {
   lateralite?: 'bilateral' | 'droit' | 'gauche'
   type_appareillage?: string
   prescripteur?: string
+  prescripteur_rpps?: string
+  prescripteur_adeli?: string
+  date_ordonnance?: string
   mutuelle?: string
   numero_adherent_mutuelle?: string
   notes?: string

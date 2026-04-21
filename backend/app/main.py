@@ -10,11 +10,26 @@ settings = get_settings()
 log = structlog.get_logger()
 
 
+async def _run_migrations(conn):
+    await conn.run_sync(Base.metadata.create_all)
+    # Safe column additions (idempotent)
+    migrations = [
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS prescripteur_rpps VARCHAR(11)",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS prescripteur_adeli VARCHAR(9)",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS date_ordonnance DATE",
+    ]
+    for sql in migrations:
+        try:
+            await conn.execute(__import__('sqlalchemy').text(sql))
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("AudioAssist Pro démarrage", version=settings.APP_VERSION)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await _run_migrations(conn)
     yield
     log.info("AudioAssist Pro arrêt")
 

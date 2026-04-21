@@ -10,6 +10,7 @@ from .integrations import router as integrations_router
 from .appointments import router as appointments_router
 from .catalog import router as catalog_router
 from .pec import router as pec_router
+from .prescripteurs import router as prescripteurs_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -23,4 +24,5 @@ api_router.include_router(reports_router,      prefix="/reports",      tags=["Co
 api_router.include_router(integrations_router, prefix="/integrations", tags=["Intégrations"])
 api_router.include_router(appointments_router, prefix="/appointments", tags=["Agenda"])
 api_router.include_router(catalog_router,      prefix="/catalog",      tags=["Catalogue"])
-api_router.include_router(pec_router,          prefix="/pec",          tags=["Prises en charge mutuelles"])
+api_router.include_router(pec_router,           prefix="/pec",           tags=["Prises en charge mutuelles"])
+api_router.include_router(prescripteurs_router, prefix="/prescripteurs", tags=["Annuaire prescripteurs"])

@@ -20,6 +20,9 @@ class PatientCreate(BaseModel):
     lateralite: Optional[LateraliteAuditive] = None
     type_appareillage: Optional[TypeAppareillage] = None
     prescripteur: Optional[str] = None
+    prescripteur_rpps: Optional[str] = None
+    prescripteur_adeli: Optional[str] = None
+    date_ordonnance: Optional[date] = None
     mutuelle: Optional[str] = None
     numero_adherent_mutuelle: Optional[str] = None
     notes: Optional[str] = None
@@ -63,6 +66,9 @@ class PatientRead(BaseModel):
     lateralite: Optional[LateraliteAuditive]
     type_appareillage: Optional[TypeAppareillage]
     prescripteur: Optional[str]
+    prescripteur_rpps: Optional[str]
+    prescripteur_adeli: Optional[str]
+    date_ordonnance: Optional[date]
     mutuelle: Optional[str]
     notes: Optional[str]
     created_at: datetime
