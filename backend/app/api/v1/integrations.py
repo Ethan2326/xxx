@@ -584,7 +584,7 @@ async def cosium_import_status(
 
 
 @router.get("/cosium/debug-login")
-async def cosium_debug_login(_: User = Depends(get_current_user)):
+async def cosium_debug_login():
     """
     Debug : teste le login Cosium étape par étape.
     Montre l'URL finale, le statut HTTP et si le formulaire Keycloak est trouvé.
