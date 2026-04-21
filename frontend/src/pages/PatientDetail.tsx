@@ -4,11 +4,12 @@ import { useQuery } from '@tanstack/react-query'
 import { patientsAPI, reportsAPI, fittingAPI } from '@/services/api'
 import {
   ArrowLeft, User, Ear, FileText, Sliders, ShieldCheck,
-  Calendar, Phone, Mail, MapPin, ChevronRight, Edit3
+  Calendar, Phone, Mail, MapPin, ChevronRight, Edit3, Link
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import PECPanel from '@/components/pec/PECPanel'
+import CosiumPanel from '@/components/cosium/CosiumPanel'
 import type { Patient } from '@/types'
 
 // ─── Audiogramme mini-tableau ─────────────────────────────────────────────────
@@ -55,6 +56,7 @@ const TABS = [
   { id: 'pec',           label: 'Prises en charge',    icon: ShieldCheck },
   { id: 'comptes_rendus',label: 'Comptes rendus',      icon: FileText },
   { id: 'reglage',       label: 'Réglage IA',          icon: Sliders },
+  { id: 'cosium',        label: 'Cosium',              icon: Link },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -584,6 +586,11 @@ export default function PatientDetailPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Cosium ── */}
+        {activeTab === 'cosium' && (
+          <CosiumPanel patient={patient} />
         )}
 
         {/* ── Réglage IA ── */}

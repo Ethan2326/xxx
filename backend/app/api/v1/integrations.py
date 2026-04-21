@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database import get_db
 from app.services.noah4_service import noah4_service
 from app.services.audiowizard_service import audiowizard_service
 from app.services.cosium_service import cosium_service
@@ -86,3 +88,37 @@ async def cosium_agenda(
     d1 = date.fromisoformat(date_debut)
     d2 = date.fromisoformat(date_fin)
     return await cosium_service.get_agenda(d1, d2)
+
+
+@router.get("/cosium/patients/{cosium_id}/appareils")
+async def cosium_patient_appareils(cosium_id: str, _: User = Depends(get_current_user)):
+    return await cosium_service.get_patient_appareils(cosium_id)
+
+
+@router.get("/cosium/patients/{cosium_id}/devis")
+async def cosium_patient_devis(cosium_id: str, _: User = Depends(get_current_user)):
+    return await cosium_service.get_patient_devis(cosium_id)
+
+
+@router.get("/cosium/patients/{cosium_id}/rdv")
+async def cosium_patient_rdv(cosium_id: str, _: User = Depends(get_current_user)):
+    return await cosium_service.get_patient_rdv(cosium_id)
+
+
+@router.post("/cosium/patients/{patient_id}/link")
+async def cosium_link_patient(
+    patient_id: str,
+    cosium_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from sqlalchemy import select
+    from app.models.patient import Patient
+    from uuid import UUID
+    result = await db.execute(select(Patient).where(Patient.id == UUID(patient_id)))
+    patient = result.scalar_one_or_none()
+    if not patient:
+        raise HTTPException(404, "Patient non trouvé")
+    patient.cosium_id = cosium_id
+    await db.flush()
+    return {"linked": True, "cosium_id": cosium_id}

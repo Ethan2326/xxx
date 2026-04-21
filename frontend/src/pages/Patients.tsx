@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { patientsAPI } from '@/services/api'
+import api from '@/services/api'
 import { Search, Plus, User, ChevronRight, X, ChevronDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
@@ -98,6 +99,91 @@ function MutuelleCombobox({ value, onChange }: { value: string; onChange: (v: st
   )
 }
 
+// ── Combobox prescripteur (recherche asynchrone) ──────────────────────────────
+interface PrescripteurResult {
+  nom: string
+  rpps?: string
+  adeli?: string
+  specialite?: string
+}
+
+function PrescripteurCombobox({
+  value, onChange, onSelect,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onSelect: (p: PrescripteurResult) => void
+}) {
+  const [query, setQuery] = useState(value)
+  const [open, setOpen] = useState(false)
+  const [debounced, setDebounced] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Debounce 400ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), 400)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const { data: results = [], isFetching } = useQuery<PrescripteurResult[]>({
+    queryKey: ['prescripteurs', debounced],
+    queryFn: () =>
+      api.get<PrescripteurResult[]>('/prescripteurs', { params: { q: debounced } })
+        .then(r => r.data),
+    enabled: debounced.length >= 2,
+    staleTime: 30_000,
+  })
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="relative">
+        <input
+          className="input pr-8"
+          placeholder="Rechercher un prescripteur…"
+          value={query}
+          onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+        />
+        {isFetching && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-brand-300 border-t-brand-600 rounded-full animate-spin" />
+        )}
+        {!isFetching && <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />}
+      </div>
+      {open && results.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg text-sm">
+          {results.map(p => (
+            <li
+              key={p.rpps || p.adeli || p.nom}
+              className="px-3 py-2 cursor-pointer hover:bg-brand-50 text-gray-700"
+              onMouseDown={() => {
+                onSelect(p)
+                setQuery(p.nom)
+                setOpen(false)
+              }}
+            >
+              <span className="font-medium">{p.nom}</span>
+              {p.specialite && <span className="text-gray-400 ml-2 text-xs">{p.specialite}</span>}
+              {(p.rpps || p.adeli) && (
+                <span className="text-gray-400 ml-2 text-xs font-mono">
+                  {p.rpps ? `RPPS ${p.rpps}` : `Adeli ${p.adeli}`}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // ── Modal création patient ────────────────────────────────────────────────────
 function NewPatientModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
@@ -107,7 +193,8 @@ function NewPatientModal({ onClose }: { onClose: () => void }) {
     first_name: '', last_name: '', birth_date: '', gender: '',
     mobile: '', phone: '', email: '', address: '', city: '', postal_code: '',
     nir: '', mutuelle: '', lateralite: '', type_appareillage: '',
-    prescripteur: '', notes: '',
+    prescripteur: '', prescripteur_rpps: '', prescripteur_adeli: '',
+    date_ordonnance: '', notes: '',
   })
   const [dejaAppareille, setDejaAppareille] = useState(false)
   const [appareilOD, setAppareilOD] = useState({ marque: '', modele: '', reference: '', numero_serie: '' })
@@ -129,6 +216,9 @@ function NewPatientModal({ onClose }: { onClose: () => void }) {
         lateralite: (data.lateralite as any) || undefined,
         type_appareillage: (data.type_appareillage as any) || undefined,
         prescripteur: data.prescripteur || undefined,
+        prescripteur_rpps: (data as any).prescripteur_rpps || undefined,
+        prescripteur_adeli: (data as any).prescripteur_adeli || undefined,
+        date_ordonnance: (data as any).date_ordonnance || undefined,
         notes: data.notes || undefined,
       })
       const patientId = res.data.id
@@ -215,13 +305,50 @@ function NewPatientModal({ onClose }: { onClose: () => void }) {
                 <label className="label">Type d'appareillage</label>
                 <select className="input" value={form.type_appareillage} onChange={set('type_appareillage')}>
                   <option value="">—</option>
-                  <option value="contour">Contour d'oreille</option>
-                  <option value="intra">Intra-auriculaire</option>
-                  <option value="ric">RIC / RITE</option>
-                  <option value="baha">BAHA</option>
+                  <option value="RITE">Contour RITE</option>
+                  <option value="BTE">Contour BTE</option>
+                  <option value="ITE">Intra ITE</option>
+                  <option value="ITC">Intra ITC</option>
+                  <option value="CIC">Intra CIC</option>
+                  <option value="IIC">Intra IIC (invisible)</option>
+                  <option value="CROS">CROS</option>
+                  <option value="BiCROS">BiCROS</option>
                 </select>
               </div>
-              <div className="col-span-2"><label className="label">Prescripteur</label><input className="input" value={form.prescripteur} onChange={set('prescripteur')} placeholder="Dr. Dupont" /></div>
+              <div className="col-span-2">
+                <label className="label">Date de l'ordonnance</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={form.date_ordonnance}
+                  onChange={set('date_ordonnance')}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="label">Prescripteur</label>
+                <PrescripteurCombobox
+                  value={form.prescripteur}
+                  onChange={v => setForm(f => ({ ...f, prescripteur: v, prescripteur_rpps: '', prescripteur_adeli: '' }))}
+                  onSelect={p => setForm(f => ({
+                    ...f,
+                    prescripteur: p.nom,
+                    prescripteur_rpps: p.rpps || '',
+                    prescripteur_adeli: p.adeli || '',
+                  }))}
+                />
+              </div>
+              {(form.prescripteur_rpps || form.prescripteur_adeli) && (
+                <div className="col-span-2 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label text-gray-400">RPPS</label>
+                    <input className="input bg-gray-50 text-gray-500 font-mono text-sm" readOnly value={form.prescripteur_rpps} />
+                  </div>
+                  <div>
+                    <label className="label text-gray-400">ADELI</label>
+                    <input className="input bg-gray-50 text-gray-500 font-mono text-sm" readOnly value={form.prescripteur_adeli} />
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 

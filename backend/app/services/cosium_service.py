@@ -140,6 +140,19 @@ class CosiumService:
     async def get_patient_rdv(self, cosium_id: str) -> list[dict]:
         return await self._get(f"/api/v2/patients/{cosium_id}/rdv")
 
+    async def get_patient_appareils(self, cosium_id: str) -> list[dict]:
+        """Récupère les appareils auditifs d'un patient."""
+        try:
+            return await self._get(f"/api/v2/patients/{cosium_id}/appareillages")
+        except Exception:
+            # Fallback sur ventes filtrées
+            ventes = await self._get(f"/api/v2/patients/{cosium_id}/ventes")
+            return [v for v in ventes if v.get("type") in ("APPAREIL", "APPAREILLAGE")]
+
+    async def get_patient_devis(self, cosium_id: str) -> list[dict]:
+        """Récupère les devis d'un patient."""
+        return await self._get(f"/api/v2/patients/{cosium_id}/devis")
+
     # ── Ventes / Facturation ──────────────────────────────────────────────────
 
     async def get_ventes(self, cosium_id: str) -> list[dict]:
