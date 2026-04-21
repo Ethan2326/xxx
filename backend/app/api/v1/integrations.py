@@ -450,3 +450,152 @@ async def cosium_csv_preview(
         "total_csv_rows": len(rows) - 1,
         "total_local": len(local_patients),
     }
+
+
+# ── Import direct Cosium → base locale ───────────────────────────────────────
+
+@router.get("/cosium/import-all/preview")
+async def cosium_import_preview(
+    max_patients: int = Query(500, ge=10, le=2000),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Analyse combien de patients Cosium seraient importés."""
+    cosium_raw = await cosium_service.get_all_customers(page_size=max_patients)
+
+    res = await db.execute(select(Patient))
+    existing = list(res.scalars().all())
+    existing_cosium_ids = {p.cosium_id for p in existing if p.cosium_id}
+    existing_nirs = {p.nir.replace(" ", "") for p in existing if p.nir}
+
+    to_create, to_skip, no_date = 0, 0, 0
+    samples = []
+
+    for cp in cosium_raw:
+        mapped = cosium_service.map_cosium_patient(cp)
+        cosium_id = mapped.get("cosium_id", "")
+        nir_clean = (mapped.get("nir") or "").replace(" ", "")
+
+        if cosium_id in existing_cosium_ids or (nir_clean and nir_clean in existing_nirs):
+            to_skip += 1
+            continue
+
+        if not mapped.get("birth_date"):
+            no_date += 1
+            continue
+
+        to_create += 1
+        if len(samples) < 5:
+            samples.append({
+                "cosium_id": cosium_id,
+                "last_name": mapped.get("last_name"),
+                "first_name": mapped.get("first_name"),
+                "birth_date": mapped.get("birth_date"),
+            })
+
+    return {
+        "total_cosium": len(cosium_raw),
+        "to_create": to_create,
+        "to_skip": to_skip,
+        "no_birth_date": no_date,
+        "total_local": len(existing),
+        "samples": samples,
+    }
+
+
+@router.post("/cosium/import-all")
+async def cosium_import_all(
+    max_patients: int = Query(500, ge=10, le=2000),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Importe tous les patients Cosium dans la base locale.
+    - Ignore ceux déjà présents (par cosium_id ou NIR)
+    - Lie automatiquement si NIR match
+    """
+    from datetime import date as DateType
+
+    cosium_raw = await cosium_service.get_all_customers(page_size=max_patients)
+
+    res = await db.execute(select(Patient))
+    existing = list(res.scalars().all())
+    existing_cosium_ids = {p.cosium_id for p in existing if p.cosium_id}
+    existing_nirs: dict[str, Patient] = {
+        p.nir.replace(" ", ""): p for p in existing if p.nir
+    }
+
+    created, linked, skipped, errors = 0, 0, 0, []
+
+    for cp in cosium_raw:
+        mapped = cosium_service.map_cosium_patient(cp)
+        cosium_id = mapped.get("cosium_id", "")
+        nir_clean = (mapped.get("nir") or "").replace(" ", "")
+
+        # Déjà lié par cosium_id
+        if cosium_id and cosium_id in existing_cosium_ids:
+            skipped += 1
+            continue
+
+        # NIR match → juste lier
+        if nir_clean and nir_clean in existing_nirs:
+            lp = existing_nirs[nir_clean]
+            if not lp.cosium_id:
+                lp.cosium_id = cosium_id
+                existing_cosium_ids.add(cosium_id)
+                linked += 1
+            else:
+                skipped += 1
+            continue
+
+        # Champs obligatoires
+        if not mapped.get("first_name") or not mapped.get("last_name"):
+            errors.append(f"Cosium {cosium_id}: nom/prénom manquant")
+            continue
+
+        birth_str = mapped.get("birth_date")
+        if not birth_str:
+            errors.append(f"Cosium {cosium_id} ({mapped.get('last_name')} {mapped.get('first_name')}): date de naissance manquante — ignoré")
+            continue
+
+        try:
+            birth_date = DateType.fromisoformat(birth_str[:10])
+        except ValueError:
+            errors.append(f"Cosium {cosium_id}: date invalide '{birth_str}'")
+            continue
+
+        try:
+            postal = (mapped.get("postal_code") or "")[:5] or None
+            patient = Patient(
+                cosium_id=cosium_id or None,
+                first_name=mapped["first_name"],
+                last_name=mapped["last_name"],
+                birth_date=birth_date,
+                gender=(mapped.get("gender") or "")[:1] or None,
+                nir=mapped.get("nir"),
+                phone=mapped.get("phone"),
+                mobile=mapped.get("mobile"),
+                email=mapped.get("email"),
+                address=mapped.get("address"),
+                city=mapped.get("city"),
+                postal_code=postal,
+                mutuelle=mapped.get("mutuelle"),
+                numero_adherent_mutuelle=mapped.get("numero_adherent_mutuelle"),
+            )
+            db.add(patient)
+            if cosium_id:
+                existing_cosium_ids.add(cosium_id)
+            if nir_clean:
+                existing_nirs[nir_clean] = patient
+            created += 1
+        except Exception as e:
+            errors.append(f"Cosium {cosium_id}: {e}")
+
+    await db.flush()
+    return {
+        "created": created,
+        "linked": linked,
+        "skipped": skipped,
+        "errors": errors,
+        "total_cosium": len(cosium_raw),
+    }
