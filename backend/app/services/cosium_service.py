@@ -11,7 +11,6 @@ from app.config import get_settings
 import structlog
 
 log = structlog.get_logger()
-settings = get_settings()
 
 # Headers qui imitent Chrome — nécessaires pour que Keycloak accepte la requête
 _BROWSER_HEADERS = {
@@ -32,12 +31,20 @@ _HAL_ACCEPT = (
 
 class CosiumService:
     def __init__(self):
-        # Ex: https://c1.cosium.biz/01OPTI01370
-        self.base_url: str = (settings.COSIUM_URL or "").rstrip("/")
-        self.username: str = settings.COSIUM_USERNAME
-        self.password: str = settings.COSIUM_PASSWORD
         self._cookies: dict = {}
         self._session_expires: Optional[datetime] = None
+
+    @property
+    def base_url(self) -> str:
+        return (get_settings().COSIUM_URL or "").rstrip("/")
+
+    @property
+    def username(self) -> str:
+        return get_settings().COSIUM_USERNAME
+
+    @property
+    def password(self) -> str:
+        return get_settings().COSIUM_PASSWORD
 
     def _configured(self) -> bool:
         return bool(self.base_url and self.username and self.password)
