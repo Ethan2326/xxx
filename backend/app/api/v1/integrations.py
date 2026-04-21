@@ -581,3 +581,43 @@ async def cosium_import_status(
     if not job:
         raise HTTPException(404, "Job introuvable")
     return job
+
+
+@router.get("/cosium/debug-login")
+async def cosium_debug_login(_: User = Depends(get_current_user)):
+    """
+    Debug : teste le login Cosium étape par étape.
+    Montre l'URL finale, le statut HTTP et si le formulaire Keycloak est trouvé.
+    """
+    import httpx as _httpx
+    base = cosium_service.base_url
+    result: dict = {"base_url": base, "username": cosium_service.username}
+
+    if not base:
+        return {"error": "COSIUM_URL non configuré"}
+
+    async with _httpx.AsyncClient(
+        follow_redirects=True, timeout=20,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    ) as client:
+        try:
+            r1 = await client.get(f"{base}/classic/")
+            result["url_finale"] = str(r1.url)
+            result["status_http"] = r1.status_code
+            result["cookies"] = list(client.cookies.keys())
+            result["body_preview"] = r1.text[:500]
+
+            action = re.search(r'action="([^"]+)"', r1.text)
+            result["formulaire_keycloak_trouve"] = bool(action)
+            if action:
+                result["form_action"] = action.group(1)[:150].replace("&amp;", "&")
+            else:
+                result["hint"] = (
+                    "Pas de formulaire trouvé. Soit déjà connecté, "
+                    "soit la page ne redirige pas vers Keycloak. "
+                    "Vérifiez body_preview."
+                )
+        except Exception as e:
+            result["erreur"] = str(e)
+
+    return result

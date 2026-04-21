@@ -165,18 +165,14 @@ class CosiumService:
     # ── Patients (customers) ──────────────────────────────────────────────────
 
     async def get_all_customers(self, page: int = 0, page_size: int = 200) -> list[dict]:
-        """Récupère tous les patients Cosium (format HAL)."""
-        try:
-            data = await self._get("/api/customers", {
-                "embed": "accounting,address,hearing-aid-specialist,optician,site,tags",
-                "page_number": page,
-                "page_size": page_size,
-                "sort": ["lastName,ASC", "firstName,ASC"],
-            })
-            return self._extract_list(data, ["customers", "tiers", "client", "items"])
-        except Exception as e:
-            log.warning("cosium_get_customers_error", error=str(e))
-            return []
+        """Récupère tous les patients Cosium (format HAL). Lève une exception si échec."""
+        data = await self._get("/api/customers", {
+            "embed": "accounting,address,hearing-aid-specialist,optician,site,tags",
+            "page_number": page,
+            "page_size": page_size,
+            "sort": ["lastName,ASC", "firstName,ASC"],
+        })
+        return self._extract_list(data, ["customers", "tiers", "client", "items"]) or []
 
     async def search_patients(self, nom: str = "", prenom: str = "", nir: str = "") -> list[dict]:
         params = {
