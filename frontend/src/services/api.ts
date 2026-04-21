@@ -53,6 +53,14 @@ export const patientsAPI = {
   delete: (id: string) => api.delete(`/patients/${id}`),
   getAudiograms: (id: string) => api.get<Audiogram[]>(`/patients/${id}/audiograms`),
   getDevices: (id: string) => api.get<HearingDevice[]>(`/patients/${id}/devices`),
+  addDevice: (id: string, data: {
+    cote: 'droit' | 'gauche'
+    marque: string
+    modele: string
+    reference?: string
+    numero_serie?: string
+    statut?: string
+  }) => api.post<HearingDevice>(`/patients/${id}/devices`, data),
 }
 
 // ── Audiogrammes ──────────────────────────────────────────────────────────────

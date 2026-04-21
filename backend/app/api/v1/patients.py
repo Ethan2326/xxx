@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_
 from app.database import get_db
 from app.models.patient import Patient
 from app.models.audiogram import Audiogram
-from app.models.device import HearingDevice
+from app.models.device import HearingDevice, DeviceCatalog, CoteAppareillage, StatutAppareil
 from app.schemas.patient import PatientCreate, PatientRead, PatientUpdate, PatientList
 from app.schemas.audiogram import AudiogramRead
 from app.schemas.device import HearingDeviceRead
@@ -12,8 +12,18 @@ from app.api.v1.auth import get_current_user
 from app.models.user import User
 from typing import Optional
 from uuid import UUID
+from pydantic import BaseModel
 
 router = APIRouter()
+
+
+class DeviceQuickCreate(BaseModel):
+    cote: CoteAppareillage
+    marque: str
+    modele: str
+    reference: Optional[str] = None
+    numero_serie: Optional[str] = None
+    statut: StatutAppareil = StatutAppareil.ADAPTE
 
 
 @router.get("", response_model=list[PatientList])
@@ -132,3 +142,41 @@ async def get_patient_devices(
         .order_by(HearingDevice.created_at.desc())
     )
     return [HearingDeviceRead.model_validate(d) for d in result.scalars().all()]
+
+
+@router.post("/{patient_id}/devices", response_model=HearingDeviceRead, status_code=201)
+async def add_patient_device(
+    patient_id: UUID,
+    device_in: DeviceQuickCreate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    # Find or create catalog entry
+    result = await db.execute(
+        select(DeviceCatalog).where(
+            DeviceCatalog.marque == device_in.marque,
+            DeviceCatalog.modele == device_in.modele,
+        )
+    )
+    catalog = result.scalar_one_or_none()
+    if not catalog:
+        catalog = DeviceCatalog(
+            fabricant=device_in.marque,
+            marque=device_in.marque,
+            modele=device_in.modele,
+            reference=device_in.reference or f"{device_in.marque}-{device_in.modele}",
+        )
+        db.add(catalog)
+        await db.flush()
+
+    device = HearingDevice(
+        patient_id=patient_id,
+        catalog_id=catalog.id,
+        cote=device_in.cote,
+        statut=device_in.statut,
+        numero_serie=device_in.numero_serie or None,
+    )
+    db.add(device)
+    await db.flush()
+    await db.refresh(device)
+    return HearingDeviceRead.model_validate(device)
