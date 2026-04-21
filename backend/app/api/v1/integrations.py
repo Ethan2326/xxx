@@ -585,16 +585,29 @@ async def cosium_import_status(
 
 @router.get("/cosium/debug-login")
 async def cosium_debug_login():
-    """
-    Debug : teste le login Cosium étape par étape.
-    Montre l'URL finale, le statut HTTP et si le formulaire Keycloak est trouvé.
-    """
-    import httpx as _httpx
-    base = cosium_service.base_url
-    result: dict = {"base_url": base, "username": cosium_service.username}
+    """Debug : vérifie les env vars et teste le login Cosium."""
+    import httpx as _httpx, os as _os
 
+    # Lecture directe os.environ (bypass pydantic)
+    env_cosium_url      = _os.environ.get("COSIUM_URL") or _os.environ.get("cosium_url") or ""
+    env_cosium_username = _os.environ.get("COSIUM_USERNAME") or _os.environ.get("cosium_username") or ""
+    env_cosium_password = _os.environ.get("COSIUM_PASSWORD") or _os.environ.get("cosium_password") or ""
+
+    # Liste toutes les vars qui contiennent "cosium" (insensible à la casse)
+    cosium_vars = {k: ("***" if "pass" in k.lower() or "password" in k.lower() else v)
+                   for k, v in _os.environ.items() if "cosium" in k.lower()}
+
+    result: dict = {
+        "COSIUM_URL_direct":      env_cosium_url or "NON TROUVÉ",
+        "COSIUM_USERNAME_direct": env_cosium_username or "NON TROUVÉ",
+        "COSIUM_PASSWORD_direct": "***" if env_cosium_password else "NON TROUVÉ",
+        "toutes_vars_cosium":     cosium_vars or "AUCUNE",
+        "service_base_url":       cosium_service.base_url or "vide",
+    }
+
+    base = env_cosium_url
     if not base:
-        return {"error": "COSIUM_URL non configuré"}
+        return {**result, "error": "COSIUM_URL absent des variables d'environnement Render"}
 
     async with _httpx.AsyncClient(
         follow_redirects=True, timeout=20,
