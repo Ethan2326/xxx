@@ -153,6 +153,21 @@ class CosiumService:
         """Récupère les devis d'un patient."""
         return await self._get(f"/api/v2/patients/{cosium_id}/devis")
 
+    async def get_all_patients_paginated(self, offset: int = 0, limit: int = 200) -> list[dict]:
+        """Récupère tous les patients Cosium (pagination offset/limit)."""
+        try:
+            result = await self._get("/api/v2/patients", {"_start": offset, "_limit": limit})
+            if isinstance(result, list):
+                return result
+            if isinstance(result, dict):
+                for key in ("data", "items", "patients", "results"):
+                    if key in result:
+                        return result[key]
+            return []
+        except Exception as e:
+            log.warning("cosium_all_patients_error", error=str(e))
+            return []
+
     # ── Ventes / Facturation ──────────────────────────────────────────────────
 
     async def get_ventes(self, cosium_id: str) -> list[dict]:

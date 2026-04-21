@@ -144,6 +144,40 @@ export const integrationsAPI = {
   status: () => api.get<Record<string, { connected: boolean; label: string }>>('/integrations/status'),
   noahPatients: () => api.get('/integrations/noah4/patients'),
   cosiumSearch: (nom: string) => api.get('/integrations/cosium/patients', { params: { nom } }),
+  cosiumSyncPreview: (maxCosium = 200) =>
+    api.get<CosiumSyncPreview>('/integrations/cosium/sync/preview', { params: { max_cosium: maxCosium } }),
+  cosiumSyncApply: (links: { local_id: string; cosium_id: string }[]) =>
+    api.post<{ applied: number; errors: string[] }>('/integrations/cosium/sync/apply', links),
+}
+
+export interface CosiumSyncMatch {
+  cosium_id: string
+  cosium_patient: {
+    first_name: string
+    last_name: string
+    birth_date?: string
+    nir?: string
+    phone?: string
+    email?: string
+  }
+  local_patient: {
+    id: string
+    first_name: string
+    last_name: string
+    birth_date?: string
+    nir?: string
+    cosium_id?: string
+  } | null
+  local_patient_id: string | null
+  score: number
+  auto_match: boolean
+}
+
+export interface CosiumSyncPreview {
+  matches: CosiumSyncMatch[]
+  unmatched_local: { id: string; first_name: string; last_name: string; birth_date?: string; nir?: string }[]
+  total_cosium: number
+  total_local: number
 }
 
 export default api

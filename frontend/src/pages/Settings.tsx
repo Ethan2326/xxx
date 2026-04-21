@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { integrationsAPI } from '@/services/api'
 import { useAuthStore } from '@/store'
-import { Settings, Wifi, WifiOff, User, Building, Shield } from 'lucide-react'
+import { Settings, Wifi, WifiOff, User, Building, Shield, RefreshCw } from 'lucide-react'
+import CosiumSyncModal from '@/components/cosium/CosiumSyncModal'
 
 export default function SettingsPage() {
   const { user } = useAuthStore()
+  const [showCosiumSync, setShowCosiumSync] = useState(false)
 
   const { data: integrations, refetch } = useQuery({
     queryKey: ['integrations-status'],
@@ -63,11 +66,23 @@ export default function SettingsPage() {
                       {key === 'cosium' && 'ERP opticiens-audioprothésistes'}
                     </div>
                   </div>
-                  <div className={`flex items-center gap-2 text-sm font-medium ${info.connected ? 'text-green-600' : 'text-red-500'}`}>
-                    {info.connected
-                      ? <><Wifi className="w-4 h-4" /> Connecté</>
-                      : <><WifiOff className="w-4 h-4" /> Non connecté</>
-                    }
+                  <div className="flex items-center gap-3">
+                    {key === 'cosium' && (
+                      <button
+                        className="btn-secondary text-xs flex items-center gap-1.5"
+                        onClick={() => setShowCosiumSync(true)}
+                        title="Synchroniser toute la base patients avec Cosium"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Synchroniser la base
+                      </button>
+                    )}
+                    <div className={`flex items-center gap-2 text-sm font-medium ${info.connected ? 'text-green-600' : 'text-red-500'}`}>
+                      {info.connected
+                        ? <><Wifi className="w-4 h-4" /> Connecté</>
+                        : <><WifiOff className="w-4 h-4" /> Non connecté</>
+                      }
+                    </div>
                   </div>
                 </div>
               ))
@@ -75,7 +90,7 @@ export default function SettingsPage() {
           }
         </div>
         <p className="text-xs text-gray-400 mt-4">
-          Configuration dans le fichier .env (variables NOAH4_HOST, AUDIOWIZARD_URL, COSIUM_URL)
+          Configuration dans le fichier .env (variables NOAH4_HOST, AUDIOWIZARD_URL, COSIUM_URL, COSIUM_USERNAME, COSIUM_PASSWORD)
         </p>
       </div>
 
@@ -94,6 +109,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Cosium sync modal */}
+      {showCosiumSync && <CosiumSyncModal onClose={() => setShowCosiumSync(false)} />}
 
       {/* RGPD */}
       <div className="card p-6">
