@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { patientsAPI, reportsAPI, fittingAPI } from '@/services/api'
+import { patientsAPI, reportsAPI, fittingAPI, billingAPI, appointmentsAPI } from '@/services/api'
 import {
   ArrowLeft, User, Ear, FileText, Sliders, ShieldCheck,
-  Calendar, Phone, Mail, MapPin, ChevronRight, Edit3, Link
+  Calendar, Phone, Mail, MapPin, ChevronRight, Edit3, Link,
+  Sparkles, Receipt, Download, AlertTriangle, CheckCircle2, Clock
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, differenceInMonths, differenceInDays, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import PECPanel from '@/components/pec/PECPanel'
 import CosiumPanel from '@/components/cosium/CosiumPanel'
@@ -50,11 +51,13 @@ function AudiogramTable({ seuils, label }: { seuils: Record<string, number> | un
 
 // ─── Onglets ──────────────────────────────────────────────────────────────────
 const TABS = [
-  { id: 'informations',  label: 'Informations',       icon: User },
+  { id: 'synthese',      label: 'Synthèse',            icon: Sparkles },
+  { id: 'informations',  label: 'Informations',        icon: User },
   { id: 'audiogrammes',  label: 'Audiogrammes',        icon: Ear },
   { id: 'appareils',     label: 'Appareils',           icon: Ear },
   { id: 'pec',           label: 'Prises en charge',    icon: ShieldCheck },
   { id: 'comptes_rendus',label: 'Comptes rendus',      icon: FileText },
+  { id: 'facturation',   label: 'Facturation',         icon: Receipt },
   { id: 'reglage',       label: 'Réglage IA',          icon: Sliders },
   { id: 'cosium',        label: 'Cosium',              icon: Link },
 ] as const
@@ -65,7 +68,7 @@ type TabId = typeof TABS[number]['id']
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<TabId>('informations')
+  const [activeTab, setActiveTab] = useState<TabId>('synthese')
 
   const { data: patient, isLoading } = useQuery({
     queryKey: ['patient', id],
@@ -76,25 +79,43 @@ export default function PatientDetailPage() {
   const { data: audiograms } = useQuery({
     queryKey: ['patient-audiograms', id],
     queryFn: () => patientsAPI.getAudiograms(id!).then(r => r.data),
-    enabled: !!id && activeTab === 'audiogrammes',
+    enabled: !!id && (activeTab === 'audiogrammes' || activeTab === 'synthese'),
   })
 
   const { data: devices } = useQuery({
     queryKey: ['patient-devices', id],
     queryFn: () => patientsAPI.getDevices(id!).then(r => r.data),
-    enabled: !!id && (activeTab === 'appareils' || activeTab === 'informations'),
+    enabled: !!id && (activeTab === 'appareils' || activeTab === 'informations' || activeTab === 'synthese'),
   })
 
   const { data: reports } = useQuery({
     queryKey: ['patient-reports', id],
     queryFn: () => reportsAPI.getPatientReports(id!).then(r => r.data),
-    enabled: !!id && activeTab === 'comptes_rendus',
+    enabled: !!id && (activeTab === 'comptes_rendus' || activeTab === 'synthese'),
   })
 
   const { data: fittingSessions } = useQuery({
     queryKey: ['patient-fitting', id],
     queryFn: () => fittingAPI.getPatientSessions(id!).then(r => r.data),
     enabled: !!id && activeTab === 'reglage',
+  })
+
+  const { data: allAppointments } = useQuery({
+    queryKey: ['appointments-patient', id],
+    queryFn: () => appointmentsAPI.list().then(r => r.data),
+    enabled: !!id && activeTab === 'synthese',
+  })
+
+  const { data: patientDevis } = useQuery({
+    queryKey: ['patient-devis', id],
+    queryFn: () => billingAPI.listDevis({ patient_id: id }).then(r => r.data),
+    enabled: !!id && (activeTab === 'facturation' || activeTab === 'synthese'),
+  })
+
+  const { data: patientFactures } = useQuery({
+    queryKey: ['patient-factures', id],
+    queryFn: () => billingAPI.listFactures({ patient_id: id }).then(r => r.data),
+    enabled: !!id && activeTab === 'facturation',
   })
 
   if (isLoading) {
@@ -241,6 +262,156 @@ export default function PatientDetailPage() {
 
       {/* ── Contenu des onglets ────────────────────────────────────────── */}
       <div className="p-6">
+
+        {/* ── Synthèse ── */}
+        {activeTab === 'synthese' && (() => {
+          const now = new Date()
+          const lastAudio = audiograms?.[0]
+          const activeDevices = (devices ?? []).filter((d: any) => d.statut === 'adapte' || d.statut === 'en_essai')
+          const patientAppts = (allAppointments ?? []).filter((a: any) => a.patient_id === id)
+          const lastAppt = patientAppts.sort((a: any, b: any) => parseISO(b.debut).getTime() - parseISO(a.debut).getTime())[0]
+          const nextAppts = patientAppts.filter((a: any) => parseISO(a.debut) > now).sort((a: any, b: any) => parseISO(a.debut).getTime() - parseISO(b.debut).getTime()).slice(0, 2)
+          const monthsSinceLastAppt = lastAppt ? differenceInMonths(now, parseISO(lastAppt.debut)) : null
+          const monthsSinceLastAudio = lastAudio ? differenceInMonths(now, parseISO(lastAudio.date_mesure)) : null
+          const pendingDevis = (patientDevis ?? []).filter((d: any) => d.statut === 'brouillon' || d.statut === 'envoye')
+
+          let score = 0
+          if (lastAudio && monthsSinceLastAudio !== null && monthsSinceLastAudio < 12) score += 30
+          if (activeDevices.length > 0) score += 30
+          if (lastAppt && monthsSinceLastAppt !== null && monthsSinceLastAppt < 12) score += 20
+          if (patient.notes) score += 10
+          if (patient.nir) score += 10
+
+          const scoreColor = score >= 70 ? 'text-green-600 bg-green-50 border-green-200' : score >= 40 ? 'text-orange-500 bg-orange-50 border-orange-200' : 'text-red-500 bg-red-50 border-red-200'
+          const scoreIcon = score >= 70 ? CheckCircle2 : score >= 40 ? Clock : AlertTriangle
+          const ScoreIcon = scoreIcon
+
+          return (
+            <div className="space-y-4">
+              <div className={`rounded-xl border p-4 flex items-center gap-4 ${scoreColor}`}>
+                <ScoreIcon className="w-8 h-8 flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-2xl">{score}/100</span>
+                    <span className="font-semibold text-sm">Score de suivi</span>
+                  </div>
+                  <p className="text-xs mt-0.5 opacity-80">
+                    {score >= 70 ? 'Dossier bien suivi — continuez ainsi !' : score >= 40 ? 'Suivi partiel — quelques actions recommandées.' : 'Attention — ce patient nécessite une attention particulière.'}
+                  </p>
+                </div>
+                <div className="text-right text-xs opacity-70 space-y-0.5">
+                  {lastAudio && monthsSinceLastAudio !== null && monthsSinceLastAudio < 12 && <div>✓ Audiogramme récent</div>}
+                  {activeDevices.length > 0 && <div>✓ Appareils actifs</div>}
+                  {lastAppt && monthsSinceLastAppt !== null && monthsSinceLastAppt < 12 && <div>✓ RDV récent</div>}
+                  {patient.nir && <div>✓ NIR renseigné</div>}
+                </div>
+              </div>
+
+              {monthsSinceLastAppt !== null && monthsSinceLastAppt > 6 && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 flex items-center gap-3 text-red-700 text-sm">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  Pas de rendez-vous depuis {monthsSinceLastAppt} mois — pensez à recontacter ce patient.
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="card p-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Dernier audiogramme</h3>
+                  {lastAudio ? (
+                    <div className="space-y-1.5 text-sm">
+                      <p className="text-xs text-gray-400">{format(parseISO(lastAudio.date_mesure), 'dd MMMM yyyy', { locale: fr })} {monthsSinceLastAudio !== null && monthsSinceLastAudio > 11 && <span className="text-orange-500 ml-1">({monthsSinceLastAudio} mois)</span>}</p>
+                      {lastAudio.perte_moyenne_od != null && (
+                        <div className="flex items-center gap-2">
+                          <span className="badge bg-blue-100 text-blue-700 text-xs">OD</span>
+                          <span className="font-medium">{lastAudio.perte_moyenne_od} dB</span>
+                          {lastAudio.classification_od && <span className="text-gray-500 text-xs">— {lastAudio.classification_od}</span>}
+                        </div>
+                      )}
+                      {lastAudio.perte_moyenne_og != null && (
+                        <div className="flex items-center gap-2">
+                          <span className="badge bg-pink-100 text-pink-700 text-xs">OG</span>
+                          <span className="font-medium">{lastAudio.perte_moyenne_og} dB</span>
+                          {lastAudio.classification_og && <span className="text-gray-500 text-xs">— {lastAudio.classification_og}</span>}
+                        </div>
+                      )}
+                    </div>
+                  ) : <p className="text-sm text-gray-400">Aucun audiogramme</p>}
+                </div>
+
+                <div className="card p-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Appareils actifs</h3>
+                  {activeDevices.length > 0 ? (
+                    <div className="space-y-2">
+                      {activeDevices.map((d: any) => (
+                        <div key={d.id} className="flex items-center gap-2 text-sm">
+                          <span className={`badge text-xs ${d.cote === 'droit' ? 'bg-blue-100 text-blue-700' : d.cote === 'gauche' ? 'bg-pink-100 text-pink-700' : 'bg-purple-100 text-purple-700'}`}>
+                            {d.cote === 'droit' ? 'OD' : d.cote === 'gauche' ? 'OG' : 'Bilat.'}
+                          </span>
+                          <span className="font-medium truncate">{d.catalog ? `${d.catalog.marque} ${d.catalog.modele}` : 'Non catalogué'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-gray-400">Aucun appareil actif</p>}
+                </div>
+
+                <div className="card p-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Prochains RDV</h3>
+                  {nextAppts.length > 0 ? (
+                    <div className="space-y-2">
+                      {nextAppts.map((a: any) => (
+                        <div key={a.id} className="text-sm">
+                          <p className="font-medium">{format(parseISO(a.debut), 'dd MMM yyyy à HH:mm', { locale: fr })}</p>
+                          <p className="text-xs text-gray-400">{a.type} — dans {differenceInDays(parseISO(a.debut), now)} j</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-gray-400">Aucun RDV planifié</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="card p-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Derniers comptes rendus</h3>
+                  {reports && (reports as any[]).length > 0 ? (
+                    <div className="space-y-2">
+                      {(reports as any[]).slice(0, 2).map((r: any) => (
+                        <div key={r.id} className="flex items-center justify-between text-sm">
+                          <div>
+                            <p className="font-medium">{r.titre}</p>
+                            <p className="text-xs text-gray-400">{format(parseISO(r.date_redaction), 'dd/MM/yyyy')}</p>
+                          </div>
+                          <a href={`/api/v1/reports/${r.id}/pdf`} target="_blank" rel="noreferrer" className="p-1.5 rounded hover:bg-blue-50 text-blue-600">
+                            <Download className="w-4 h-4" />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-gray-400">Aucun compte rendu</p>}
+                </div>
+
+                <div className="card p-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Devis en cours</h3>
+                  {pendingDevis.length > 0 ? (
+                    <div className="space-y-2">
+                      {pendingDevis.slice(0, 3).map((d: any) => (
+                        <div key={d.id} className="flex items-center justify-between text-sm">
+                          <div>
+                            <p className="font-medium">{d.numero}</p>
+                            <p className="text-xs text-gray-400">{d.montant_ttc?.toFixed(2)} € TTC</p>
+                          </div>
+                          <span className={`badge text-xs ${d.statut === 'envoye' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{d.statut}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-gray-400">Aucun devis en attente</p>}
+                  <button className="mt-3 w-full text-xs text-brand-600 hover:text-brand-700 font-medium" onClick={() => setActiveTab('facturation')}>
+                    Voir toute la facturation →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── Informations ── */}
         {activeTab === 'informations' && (
@@ -585,6 +756,114 @@ export default function PatientDetailPage() {
                 Aucun compte rendu
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Facturation ── */}
+        {activeTab === 'facturation' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Facturation</h2>
+              <button className="btn-primary text-sm" onClick={() => navigate(`/billing?patient_id=${patient.id}`)}>
+                <Receipt className="w-4 h-4" />
+                Nouveau devis
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Devis</h3>
+              {patientDevis && (patientDevis as any[]).length > 0 ? (
+                <div className="card overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Montant TTC</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
+                        <th className="px-4 py-3 w-10" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {(patientDevis as any[]).map((d: any) => (
+                        <tr key={d.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-mono text-xs text-gray-700">{d.numero}</td>
+                          <td className="px-4 py-3 text-gray-500">{format(parseISO(d.date_devis), 'dd/MM/yyyy')}</td>
+                          <td className="px-4 py-3 font-semibold">{d.montant_ttc?.toFixed(2)} €</td>
+                          <td className="px-4 py-3">
+                            <span className={`badge text-xs ${
+                              d.statut === 'accepte' ? 'bg-green-100 text-green-700' :
+                              d.statut === 'envoye' ? 'bg-blue-100 text-blue-700' :
+                              d.statut === 'refuse' ? 'bg-red-100 text-red-700' :
+                              d.statut === 'expire' ? 'bg-gray-100 text-gray-500' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>{d.statut}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <a href={billingAPI.getDevisPdfUrl(d.id)} target="_blank" rel="noreferrer"
+                              className="p-1.5 rounded hover:bg-blue-50 text-blue-600 inline-flex">
+                              <Download className="w-4 h-4" />
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="card p-8 text-center text-gray-400 text-sm">Aucun devis pour ce patient</div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Factures</h3>
+              {patientFactures && (patientFactures as any[]).length > 0 ? (
+                <div className="card overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">TTC</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payé</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reste</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
+                        <th className="px-4 py-3 w-10" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {(patientFactures as any[]).map((f: any) => (
+                        <tr key={f.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-mono text-xs text-gray-700">{f.numero}</td>
+                          <td className="px-4 py-3 text-gray-500">{format(parseISO(f.date_facture), 'dd/MM/yyyy')}</td>
+                          <td className="px-4 py-3 font-semibold">{f.montant_ttc?.toFixed(2)} €</td>
+                          <td className="px-4 py-3 text-green-700">{f.montant_paye?.toFixed(2)} €</td>
+                          <td className={`px-4 py-3 font-semibold ${f.reste_a_payer > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {f.reste_a_payer?.toFixed(2)} €
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`badge text-xs ${
+                              f.statut === 'payee' ? 'bg-green-100 text-green-700' :
+                              f.statut === 'partiellement_payee' ? 'bg-orange-100 text-orange-700' :
+                              f.statut === 'annulee' ? 'bg-gray-100 text-gray-500' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>{f.statut}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <a href={billingAPI.getFacturePdfUrl(f.id)} target="_blank" rel="noreferrer"
+                              className="p-1.5 rounded hover:bg-blue-50 text-blue-600 inline-flex">
+                              <Download className="w-4 h-4" />
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="card p-8 text-center text-gray-400 text-sm">Aucune facture pour ce patient</div>
+              )}
+            </div>
           </div>
         )}
 
