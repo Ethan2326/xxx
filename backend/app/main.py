@@ -25,25 +25,26 @@ async def _run_migrations(conn):
 
 
 async def _seed_admin():
-    """Crée le compte admin par défaut si aucun utilisateur n'existe."""
-    from sqlalchemy import select, func
+    """Crée ou réinitialise le compte admin par défaut."""
+    from sqlalchemy import select
     from app.models.user import User
     from app.core.security import hash_password
 
     async with AsyncSessionLocal() as db:
-        count = (await db.execute(select(func.count()).select_from(User))).scalar()
-        if count == 0:
+        result = await db.execute(select(User).where(User.email == "admin@audioassist.fr"))
+        admin = result.scalar_one_or_none()
+        if admin is None:
             admin = User(
                 email="admin@audioassist.fr",
-                hashed_password=hash_password("Audio2024!"),
                 first_name="Admin",
                 last_name="AudioAssist",
                 role="admin",
                 is_active=True,
             )
             db.add(admin)
-            await db.commit()
-            log.info("Compte admin créé", email="admin@audioassist.fr")
+        admin.hashed_password = hash_password("Audio2024!")
+        await db.commit()
+        log.info("Compte admin prêt", email="admin@audioassist.fr")
 
 
 @asynccontextmanager
