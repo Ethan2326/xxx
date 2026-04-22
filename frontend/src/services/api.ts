@@ -124,13 +124,47 @@ export const reportsAPI = {
 }
 
 // ── Agenda ────────────────────────────────────────────────────────────────────
+
+export interface AppointmentWithPatient extends Appointment {
+  patient_nom?: string
+}
+
+export interface AiSlotSuggestion {
+  debut: string
+  fin: string
+  duree_minutes: number
+  score: number
+  label: string
+}
+
+export interface AiScheduleResult {
+  suggestions: AiSlotSuggestion[]
+  duree_minutes: number
+  contexte_patient: Record<string, unknown>
+  ai_message: string
+}
+
 export const appointmentsAPI = {
   list: (params?: { date_debut?: string; date_fin?: string }) =>
-    api.get<Appointment[]>('/appointments', { params }),
-  create: (data: Partial<Appointment>) => api.post<Appointment>('/appointments', data),
+    api.get<AppointmentWithPatient[]>('/appointments', { params }),
+  create: (data: {
+    patient_id: string
+    user_id: string
+    type: string
+    debut: string
+    fin: string
+    salle?: string
+    notes?: string
+  }) => api.post<Appointment>('/appointments', data),
   update: (id: string, data: Partial<Appointment>) =>
     api.patch<Appointment>(`/appointments/${id}`, data),
   delete: (id: string) => api.delete(`/appointments/${id}`),
+  aiSuggest: (params: {
+    patient_id: string
+    type_rdv: string
+    date_souhaitee?: string
+    nb_suggestions?: number
+  }) => api.get<AiScheduleResult>('/appointments/ai-suggest', { params }),
 }
 
 // ── Catalogue ─────────────────────────────────────────────────────────────────
