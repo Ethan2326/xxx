@@ -18,11 +18,13 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Intercepteur pour gérer les 401
+// Intercepteur pour gérer les 401 (sauf sur /auth/login)
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url || ''
+    const isLoginCall = url.includes('/auth/login') || url.includes('/auth/register')
+    if (error.response?.status === 401 && !isLoginCall) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
