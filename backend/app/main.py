@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
-from app.database import engine, Base
+from app.database import engine, Base, AsyncSessionLocal
 from app.api.v1.router import api_router
 import structlog
 
@@ -12,7 +12,6 @@ log = structlog.get_logger()
 
 async def _run_migrations(conn):
     await conn.run_sync(Base.metadata.create_all)
-    # Safe column additions (idempotent)
     migrations = [
         "ALTER TABLE patients ADD COLUMN IF NOT EXISTS prescripteur_rpps VARCHAR(11)",
         "ALTER TABLE patients ADD COLUMN IF NOT EXISTS prescripteur_adeli VARCHAR(9)",
@@ -25,11 +24,34 @@ async def _run_migrations(conn):
             pass
 
 
+async def _seed_admin():
+    """Crée le compte admin par défaut si aucun utilisateur n'existe."""
+    from sqlalchemy import select, func
+    from app.models.user import User
+    from app.core.security import hash_password
+
+    async with AsyncSessionLocal() as db:
+        count = (await db.execute(select(func.count()).select_from(User))).scalar()
+        if count == 0:
+            admin = User(
+                email="admin@audioassist.fr",
+                hashed_password=hash_password("Audio2024!"),
+                first_name="Admin",
+                last_name="AudioAssist",
+                role="admin",
+                is_active=True,
+            )
+            db.add(admin)
+            await db.commit()
+            log.info("Compte admin créé", email="admin@audioassist.fr")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("AudioAssist Pro démarrage", version=settings.APP_VERSION)
     async with engine.begin() as conn:
         await _run_migrations(conn)
+    await _seed_admin()
     yield
     log.info("AudioAssist Pro arrêt")
 
