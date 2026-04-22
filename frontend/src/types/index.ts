@@ -189,3 +189,64 @@ export interface IntegrationStatus {
   connected: boolean
   label: string
 }
+
+export interface LigneDevis {
+  designation: string
+  quantite: number
+  prix_ht: number
+  tva: number
+}
+
+export interface Devis {
+  id: string
+  patient_id: string
+  patient_nom?: string
+  numero: string
+  statut: 'brouillon' | 'envoye' | 'accepte' | 'refuse' | 'expire' | 'facture'
+  date_devis: string
+  date_validite?: string
+  appareil_od_marque?: string
+  appareil_od_modele?: string
+  appareil_od_reference?: string
+  appareil_od_classe_lpp?: number
+  appareil_od_prix_ht?: number
+  appareil_og_marque?: string
+  appareil_og_modele?: string
+  appareil_og_reference?: string
+  appareil_og_classe_lpp?: number
+  appareil_og_prix_ht?: number
+  base_remboursement_secu?: number
+  remboursement_secu?: number
+  remboursement_mutuelle?: number
+  reste_a_charge?: number
+  lignes_json?: string
+  montant_total_ht?: number
+  montant_tva?: number
+  montant_ttc?: number
+  notes?: string
+  created_at: string
+}
+
+export interface Facture {
+  id: string
+  patient_id: string
+  patient_nom?: string
+  devis_id?: string
+  numero: string
+  statut: 'emise' | 'payee' | 'partiellement_payee' | 'annulee'
+  date_facture: string
+  montant_ttc?: number
+  montant_paye?: number
+  reste_a_payer?: number
+  lignes_json?: string
+  notes?: string
+  created_at: string
+}
+
+export interface BillingStats {
+  nb_devis: number
+  total_devis_ttc: number
+  nb_factures: number
+  total_factures_ttc: number
+  reste_a_encaisser: number
+}

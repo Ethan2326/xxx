@@ -187,11 +187,20 @@ export default function ReportsPage() {
                     <div className="flex gap-1">
                       <button
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700"
-                        title="Aperçu"
+                        title="Aperçu HTML"
                         onClick={() => handlePreview(r.id)}
                       >
                         <Eye className="w-4 h-4" />
                       </button>
+                      <a
+                        href={`/api/v1/reports/${r.id}/pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1.5 rounded hover:bg-blue-100 text-blue-600 hover:text-blue-800"
+                        title="Télécharger PDF"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
                     </div>
                   </td>
                 </tr>

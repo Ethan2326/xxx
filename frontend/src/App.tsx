@@ -11,6 +11,7 @@ import ChatbotPage from '@/pages/Chatbot'
 import ReportsPage from '@/pages/Reports'
 import AgendaPage from '@/pages/Agenda'
 import SettingsPage from '@/pages/Settings'
+import BillingPage from '@/pages/Billing'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token)
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="chatbot" element={<ChatbotPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="agenda" element={<AgendaPage />} />
+          <Route path="billing" element={<BillingPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

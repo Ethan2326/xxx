@@ -7,6 +7,7 @@ from .appointment import Appointment
 from .report import Report
 from .fitting import FittingSession, FittingSituation
 from .pec import PriseEnCharge, DocumentPEC
+from .billing import Devis, Facture
 
 __all__ = [
     "User", "Patient", "Audiogram",
@@ -15,4 +16,5 @@ __all__ = [
     "Appointment", "Report",
     "FittingSession", "FittingSituation",
     "PriseEnCharge", "DocumentPEC",
+    "Devis", "Facture",
 ]

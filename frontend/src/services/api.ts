@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type {
   User, Patient, Audiogram, HearingDevice, Order, Appointment, Report,
-  FittingSituation, ChatMessage
+  FittingSituation, ChatMessage, Devis, Facture, BillingStats, LigneDevis
 } from '@/types'
 
 const api = axios.create({
@@ -182,6 +182,61 @@ export interface CosiumSyncPreview {
   total_local: number
   total_csv_rows?: number
   headers_detected?: Record<string, number>
+}
+
+// ── Devis & Factures ──────────────────────────────────────────────────────────
+
+export interface DevisCreatePayload {
+  patient_id: string
+  date_devis: string
+  date_validite?: string
+  appareil_od_marque?: string
+  appareil_od_modele?: string
+  appareil_od_reference?: string
+  appareil_od_classe_lpp?: number
+  appareil_od_prix_ht?: number
+  appareil_og_marque?: string
+  appareil_og_modele?: string
+  appareil_og_reference?: string
+  appareil_og_classe_lpp?: number
+  appareil_og_prix_ht?: number
+  remboursement_secu?: number
+  remboursement_mutuelle?: number
+  lignes?: LigneDevis[]
+  notes?: string
+}
+
+export interface FactureCreatePayload {
+  patient_id: string
+  devis_id?: string
+  date_facture: string
+  lignes?: LigneDevis[]
+  notes?: string
+}
+
+export const billingAPI = {
+  // Devis
+  listDevis: (params?: { patient_id?: string; statut?: string }) =>
+    api.get<Devis[]>('/billing/devis', { params }),
+  getDevis: (id: string) => api.get<Devis>(`/billing/devis/${id}`),
+  createDevis: (data: DevisCreatePayload) => api.post<Devis>('/billing/devis', data),
+  updateDevis: (id: string, data: Partial<{ statut: string; remboursement_secu: number; remboursement_mutuelle: number; notes: string }>) =>
+    api.patch<Devis>(`/billing/devis/${id}`, data),
+  deleteDevis: (id: string) => api.delete(`/billing/devis/${id}`),
+  getDevisPdfUrl: (id: string) => `/api/v1/billing/devis/${id}/pdf`,
+
+  // Factures
+  listFactures: (params?: { patient_id?: string; statut?: string }) =>
+    api.get<Facture[]>('/billing/factures', { params }),
+  getFacture: (id: string) => api.get<Facture>(`/billing/factures/${id}`),
+  createFacture: (data: FactureCreatePayload) => api.post<Facture>('/billing/factures', data),
+  updateFacture: (id: string, data: Partial<{ statut: string; montant_paye: number; notes: string }>) =>
+    api.patch<Facture>(`/billing/factures/${id}`, data),
+  deleteFacture: (id: string) => api.delete(`/billing/factures/${id}`),
+  getFacturePdfUrl: (id: string) => `/api/v1/billing/factures/${id}/pdf`,
+
+  // Stats
+  stats: () => api.get<BillingStats>('/billing/stats'),
 }
 
 export default api
