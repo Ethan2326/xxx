@@ -10,17 +10,19 @@ from .integrations import router as integrations_router
 from .appointments import router as appointments_router
 from .catalog import router as catalog_router
 from .pec import router as pec_router
+from .linkedin_leads import router as linkedin_leads_router
 
 api_router = APIRouter(prefix="/api/v1")
 
-api_router.include_router(auth_router,         prefix="/auth",         tags=["Authentification"])
-api_router.include_router(patients_router,     prefix="/patients",     tags=["Patients"])
-api_router.include_router(audiograms_router,   prefix="/audiograms",   tags=["Audiogrammes"])
-api_router.include_router(orders_router,       prefix="/orders",       tags=["Commandes EDI"])
-api_router.include_router(fitting_router,      prefix="/fitting",      tags=["Assistant réglage"])
-api_router.include_router(chatbot_router,      prefix="/chatbot",      tags=["Chatbot Audition"])
-api_router.include_router(reports_router,      prefix="/reports",      tags=["Comptes rendus"])
-api_router.include_router(integrations_router, prefix="/integrations", tags=["Intégrations"])
-api_router.include_router(appointments_router, prefix="/appointments", tags=["Agenda"])
-api_router.include_router(catalog_router,      prefix="/catalog",      tags=["Catalogue"])
-api_router.include_router(pec_router,          prefix="/pec",          tags=["Prises en charge mutuelles"])
+api_router.include_router(auth_router,            prefix="/auth",         tags=["Authentification"])
+api_router.include_router(patients_router,        prefix="/patients",     tags=["Patients"])
+api_router.include_router(audiograms_router,      prefix="/audiograms",   tags=["Audiogrammes"])
+api_router.include_router(orders_router,          prefix="/orders",       tags=["Commandes EDI"])
+api_router.include_router(fitting_router,         prefix="/fitting",      tags=["Assistant réglage"])
+api_router.include_router(chatbot_router,         prefix="/chatbot",      tags=["Chatbot Audition"])
+api_router.include_router(reports_router,         prefix="/reports",      tags=["Comptes rendus"])
+api_router.include_router(integrations_router,    prefix="/integrations", tags=["Intégrations"])
+api_router.include_router(appointments_router,    prefix="/appointments", tags=["Agenda"])
+api_router.include_router(catalog_router,         prefix="/catalog",      tags=["Catalogue"])
+api_router.include_router(pec_router,             prefix="/pec",          tags=["Prises en charge mutuelles"])
+api_router.include_router(linkedin_leads_router,  tags=["LinkedIn Leads"])

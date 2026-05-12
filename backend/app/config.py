@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     SMTP_SENDER_EMAIL: str = ""
     SMTP_BCC_CENTRE: str = ""  # BCC automatique sur toutes les PEC
 
+    # ─── LinkedIn Lead Scraper ────────────────────────────────────────────────
+    PROXYCURL_API_KEY: str = ""
+    APIFY_API_TOKEN: str = ""
+    LINKEDIN_SCRAPER_PROVIDER: str = "proxycurl"  # "proxycurl" | "apify"
+
     # CORS
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",

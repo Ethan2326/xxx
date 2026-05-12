@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Settings, MessageSquare, FileText,
-  ShoppingCart, Sliders, Calendar, Ear
+  ShoppingCart, Sliders, Calendar, Ear, UserPlus
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: '/orders', icon: ShoppingCart, label: 'Commandes EDI' },
   { to: '/chatbot', icon: MessageSquare, label: 'Chatbot Audition' },
   { to: '/reports', icon: FileText, label: 'Comptes rendus' },
+  { to: '/linkedin-leads', icon: UserPlus, label: 'Leads LinkedIn' },
   { to: '/settings', icon: Settings, label: 'Paramètres' },
 ]
 
